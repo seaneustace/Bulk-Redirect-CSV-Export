@@ -19,17 +19,15 @@ echo "Sean's Bulk Redirect CSV Exporter v2.0 (Updated 6/27/2024):"
 echo ""
 
 # Get user input
-read -p 'Enter your Cloudflare email: ' user_email
 read -p 'Enter your Cloudflare account ID: ' account_id
-read -p 'Enter your Cloudflare API key: ' api_key
+read -p 'Enter your Cloudflare API Token: ' api_key
 echo
 
 # List all lists
 lists_response=$(curl -s --request GET \
   --url https://api.cloudflare.com/client/v4/accounts/$account_id/rules/lists \
   --header 'Content-Type: application/json' \
-  --header "X-Auth-Email: $user_email" \
-  --header "X-Auth-Key: $api_key")
+  --header "Authorization: Bearer $api_key")
 
 # Parse and display list names and IDs
 echo "Available Lists:"
@@ -42,8 +40,7 @@ read -p 'Enter the List ID to export: ' user_list
 list_details=$(curl -s --request GET \
   --url https://api.cloudflare.com/client/v4/accounts/$account_id/rules/lists/$user_list \
   --header 'Content-Type: application/json' \
-  --header "X-Auth-Email: $user_email" \
-  --header "X-Auth-Key: $api_key")
+  --header "Authorization: Bearer $api_key")
 
 # Extract number of items
 num_items=$(echo "$list_details" | jq -r '.result.num_items')
@@ -63,11 +60,9 @@ while true; do
   response=$(curl -s --request GET \
     --url "https://api.cloudflare.com/client/v4/accounts/$account_id/rules/lists/$user_list/items?cursor=$cursor" \
     --header 'Content-Type: application/json' \
-    --header "X-Auth-Email: $user_email" \
-    --header "X-Auth-Key: $api_key")
+    --header "Authorization: Bearer $api_key")
 
-  items=$(echo "$response" | jq -c '.result[]')
-  for item in $items; do
+  while read -r item; do
     source_url=$(echo "$item" | jq -r '.redirect.source_url // "false"')
     target_url=$(echo "$item" | jq -r '.redirect.target_url // "false"')
     status_code=$(echo "$item" | jq -r '.redirect.status_code // "false"')
@@ -77,7 +72,7 @@ while true; do
     preserve_path_suffix=$(echo "$item" | jq -r '.redirect.preserve_path_suffix // "false"')
 
     csv_results+=$'\n'"$source_url,$target_url,$status_code,$preserve_query_string,$include_subdomains,$subpath_matching,$preserve_path_suffix"
-  done
+  done < <(echo "$response" | jq -c '.result[]')
 
   cursor=$(echo "$response" | jq -r '.result_info.cursors.after // empty')
   iterations=$(( iterations + 1 ))
